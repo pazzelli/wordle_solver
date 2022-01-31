@@ -5,6 +5,10 @@ from wordle_solver import WordleSolver
 def play_game(wordle_solver):
     while True:
         best_guess: str = wordle_solver.make_guess()
+        if not best_guess:
+            print("\n**** ERROR: NO WORDS REMAINING ****\n")
+            break
+
         print("\nBest guess: {}\n".format(best_guess.upper()))
 
         wrongly_placed_letter_positions = input("Input positions of YELLOW letters (valid but in wrong place) - e.g. \"2 5\"\n  start from 1, separate by a space (or press ENTER for none):\n")
