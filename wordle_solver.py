@@ -1,5 +1,5 @@
-import os
 from collections import defaultdict
+from wordle_helper import WordleHelper
 
 MAX_WORDS = 50000
 MAX_GUESSES = 6
@@ -10,52 +10,14 @@ class WordleSolver:
         self.tries = 0
         self.max_tries = MAX_GUESSES
         self.word_len = word_len
-        self.english_word_frequencies = defaultdict(int)
 
         self.incorrectly_placed_letters = dict()
         self.correctly_placed_letters = dict()
         self.required_letter_counts_exact = defaultdict(int)
         self.required_letter_counts_min = defaultdict(int)
 
-        self.remaining_words = self._init_remaining_words(word_len)
+        self.remaining_words, self.english_word_frequencies = WordleHelper.load_words(MAX_WORDS, word_len)
         self.remaining_word_frequencies = self._calc_remaining_word_frequencies()
-
-    def _get_initial_words(self, path: str = 'resources/en_full.txt'):
-        valid_words = []
-        dict_path = os.path.join(os.getcwd(), path)
-        with open(dict_path, 'r') as f:
-            for i, line in enumerate(f):
-                if i > MAX_WORDS: break
-                word, freq = str(line).strip().split()
-                if ',' in word or '.' in word or '\'' in word or '-' in word: continue
-
-                valid_words.append(word)
-                self.english_word_frequencies[word] = int(freq)
-
-        return valid_words
-
-    def _init_remaining_words(self, word_len: int):
-        preprocessed_words = set()
-        for word in self._get_initial_words():
-            # remove words that are not of the word length
-            if len(word) != word_len: continue
-            preprocessed_words.add(word)
-
-        return preprocessed_words
-
-    @staticmethod
-    def _normalize_values(d: defaultdict) -> (defaultdict, list):
-        if len(d) <= 0: return d, []
-
-        # Sort the values in the dict and take the max in order to normalize
-        sorted_items = sorted(d.items(), key=lambda item: item[1], reverse=True)
-        max_val = sorted_items[0][1]
-
-        # Normalize values in the dict
-        for k in d.keys():
-            d[k] /= max_val
-
-        return d, sorted_items
 
     def _calc_letter_and_position_scores(self) -> (defaultdict, defaultdict):
         # Count occurrences of each letter in all words
@@ -68,13 +30,13 @@ class WordleSolver:
                 position_scores[i][c] += 1.0
 
         # Normalize frequencies of each letter
-        letter_scores, sorted_letter_frequencies = WordleSolver._normalize_values(letter_scores)
-        self._print_top_k(sorted_letter_frequencies, label='letter frequencies', k=3)
+        letter_scores, sorted_letter_frequencies = WordleHelper.normalize_values(letter_scores)
+        WordleHelper.print_top_k(sorted_letter_frequencies, label='letter frequencies', k=3)
 
         # Normalize letter-position distributions
         for i in position_scores.keys():
-            _, sorted_position_frequencies = WordleSolver._normalize_values(position_scores[i])
-            # self._print_top_k(sorted_position_frequencies, label='letter position #{} frequencies'.format(i+1), k=5)
+            _, sorted_position_frequencies = WordleHelper.normalize_values(position_scores[i])
+            # WordleHelper.print_top_k(sorted_position_frequencies, label='letter position #{} frequencies'.format(i+1), k=5)
 
         return letter_scores, position_scores
 
@@ -104,7 +66,7 @@ class WordleSolver:
         sorted_word_scores = sorted(word_scores.items(), key=lambda item: item[1], reverse=True)
         return sorted_word_scores
 
-    def process_feedback(self, guessed_word, wrongly_placed_letter_positions, correctly_placed_letter_positions):
+    def _process_feedback(self, guessed_word, wrongly_placed_letter_positions, correctly_placed_letter_positions):
         total_letter_counts_observed = defaultdict(int)
         temp_letter_set = set()
 
@@ -141,7 +103,7 @@ class WordleSolver:
         self.remaining_word_frequencies = defaultdict(float)
         for word in self.remaining_words:
             self.remaining_word_frequencies[word] = self.english_word_frequencies[word]
-        WordleSolver._normalize_values(self.remaining_word_frequencies)
+        WordleHelper.normalize_values(self.remaining_word_frequencies)
         return self.remaining_word_frequencies
 
     def _eliminate_words(self, guessed_word: str):
@@ -188,16 +150,34 @@ class WordleSolver:
 
         print("\n*** {} words remaining ({} eliminated) ***".format(len(self.remaining_words), eliminated_word_count))
 
-    def make_guess(self):
+    def _make_guess(self):
         word_scores = self._calc_word_scores()
-        WordleSolver._print_top_k(word_scores, label='word scores', k=5)
+        WordleHelper.print_top_k(word_scores, label='word scores', k=5)
 
         self.tries += 1
         return word_scores[0][0] if len(word_scores) > 0 else None
 
-    @staticmethod
-    def _print_top_k(scores, label, k=3):
-        if len(scores) <= 0: return
-        print("\nTop {} {}:".format(min(k, len(scores)), label))
-        for key, score in scores[:k]:
-            print("{}: {:.3f}".format(key, score))
+    def play_game(self) -> int:
+        while True:
+            best_guess: str = self._make_guess()
+            if not best_guess:
+                print("\n**** ERROR: NO WORDS REMAINING ****\n")
+                return -1
+
+            print("\nBest guess: {}\n".format(best_guess.upper()))
+
+            wrongly_placed_letter_positions = input("Input positions of YELLOW letters (valid but in wrong place) - e.g. \"2 5\"\n  start from 1, separate by a space (or press ENTER for none):\n")
+            wrongly_placed_letter_positions = list(map(int, filter(lambda w: len(w) > 0, wrongly_placed_letter_positions.split())))
+
+            correctly_placed_letter_positions = input("\nInput positions of GREEN letters (valid and in correct place) - e.g. \"2 5\"\n  start from 1, separate by a space (or press ENTER for none):\n")
+            correctly_placed_letter_positions = list(map(int, filter(lambda w: len(w) > 0, correctly_placed_letter_positions.split())))
+
+            if len(correctly_placed_letter_positions) >= self.word_len:
+                print("\n *** YOU WIN!! - {} ***".format(best_guess.upper()))
+                return 0
+
+            if self.tries >= self.max_tries:
+                print("\n *** YOU LOSE!! *** - Too many tries")
+                return 0
+
+            self._process_feedback(best_guess, wrongly_placed_letter_positions, correctly_placed_letter_positions)
