@@ -4,7 +4,7 @@ from collections import defaultdict
 
 class WordleHelper:
     @staticmethod
-    def load_words(max_words: int, max_word_len: int, path: str = 'resources/en_full.txt') -> (list, defaultdict):
+    def load_words(max_words: int, max_word_len: int, path: str = 'resources/unigram_freq.csv') -> (list, defaultdict):
         valid_words = []
         english_word_frequencies = defaultdict(int)
 
@@ -13,8 +13,8 @@ class WordleHelper:
         with open(dict_path, 'r') as f:
             for i, line in enumerate(f):
                 if i >= max_words: break
-                word, freq = str(line).strip().split()
-                if len(word) != max_word_len or ',' in word or '.' in word or '\'' in word or '-' in word: continue
+                word, freq = str(line).strip().split(sep=',')
+                if len(word) != max_word_len: continue
 
                 valid_words.append(word)
                 english_word_frequencies[word] = int(freq)
@@ -36,8 +36,8 @@ class WordleHelper:
         return d, sorted_items
 
     @staticmethod
-    def print_top_k(scores, label, k=3):
-        if len(scores) <= 0: return
+    def print_top_k(scores, label, k=3, suppress_output=False):
+        if len(scores) <= 0 or suppress_output: return
         print("\nTop {} {}:".format(min(k, len(scores)), label))
         for key, score in scores[:k]:
             print("{}: {:.3f}".format(key, score))
